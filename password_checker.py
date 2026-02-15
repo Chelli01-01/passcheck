@@ -16,17 +16,51 @@ def load_common_words(path: str = "common_words.txt") -> set[str]:
             }
     except FileNotFoundError:
         return set()
-
+def normalize_leetspeak(s: str) -> str:
+    """
+    Replace common leet characters with letters so dictionary checks catch p@ssw0rd, adm1n, etc.
+    Keep it simple and explainable.
+    """
+    table = str.maketrans({
+        "@": "a",
+        "4": "a",
+        "8": "b",
+        "(": "c",
+        "{": "c",
+        "[": "c",
+        "3": "e",
+        "6": "g",
+        "9": "g",
+        "1": "i",
+        "!": "i",
+        "|": "i",
+        "0": "o",
+        "$": "s",
+        "5": "s",
+        "7": "t",
+        "+": "t",
+        "2": "z",
+    })
+    return s.lower().translate(table)
 
 def find_dictionary_hits(password: str, common_words: set[str]) -> list[str]:
     """
-    Return a list of common words found inside the password (case-insensitive).
-    Example: 'Admin123!' -> ['admin']
+    Return a list of common words found inside the password.
+    Checks both raw lowercase and a leetspeak-normalized version.
     """
-    s = password.lower()
-    hits = [w for w in common_words if len(w) >= 4 and w in s]
+    raw = password.lower()
+    norm = normalize_leetspeak(password)
+
+    hits: list[str] = []
+    for w in common_words:
+        if len(w) < 4:
+            continue
+        if w in raw or w in norm:
+            hits.append(w)
+
     hits.sort(key=len, reverse=True)
     return hits
+
 
 
 def estimate_entropy_bits(password: str) -> float:
