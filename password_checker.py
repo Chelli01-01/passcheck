@@ -1,20 +1,51 @@
 import math
 import getpass
+
+
+def load_common_words(path: str = "common_words.txt") -> set[str]:
+    """
+    Load a newline-separated list of common words.
+    Returns an empty set if the file is missing.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return {
+                line.strip().lower()
+                for line in f
+                if line.strip() and not line.lstrip().startswith("#")
+            }
+    except FileNotFoundError:
+        return set()
+
+
+def find_dictionary_hits(password: str, common_words: set[str]) -> list[str]:
+    """
+    Return a list of common words found inside the password (case-insensitive).
+    Example: 'Admin123!' -> ['admin']
+    """
+    s = password.lower()
+    hits = [w for w in common_words if len(w) >= 4 and w in s]
+    hits.sort(key=len, reverse=True)
+    return hits
+
+
 def estimate_entropy_bits(password: str) -> float:
     """Rough estimate: len(password) * log2(character_set_size)."""
-    charset=0
-    if any(c.islower()for c in password):
-            charset += 26
+    charset = 0
+    if any(c.islower() for c in password):
+        charset += 26
     if any(c.isupper() for c in password):
         charset += 26
     if any(c.isdigit() for c in password):
         charset += 10
     if any(not c.isalnum() for c in password):
         charset += 33  # conservative symbol estimate
+
     if charset == 0:
         return 0.0
 
     return len(password) * math.log2(charset)
+
 
 def has_simple_sequence(password: str, min_len: int = 4) -> bool:
     """Detect sequences like abcd/1234 or dcba/4321 (case-insensitive)."""
@@ -41,7 +72,6 @@ def has_repeated_run(password: str, run_len: int = 4) -> bool:
         else:
             count = 1
     return False
-
 
 
 def strength_label(score: int) -> str:
@@ -71,11 +101,19 @@ def calculate_score_and_suggestions(password: str) -> tuple[int, list[str], list
     # --- Score components ---
     score = 0
 
+    # Dictionary check (penalty)
+    common_words = load_common_words()
+    hits = find_dictionary_hits(password, common_words)
+    if hits:
+        findings.append(f"Contains common word(s): {', '.join(hits[:3])}.")
+        suggestions.append("Avoid common words/names; use random phrases or a password manager.")
+        score -= 25
+
     # 1) Length (max ~40)
     if length == 0:
         findings.append("Password is empty.")
         suggestions.append("Use a password manager to generate a long random password.")
-        return 0, findings, suggestions, entropy
+        return 0, findings, _dedupe_preserve_order(suggestions), entropy
 
     if length < 8:
         findings.append("Too short (< 8 characters).")
@@ -100,8 +138,8 @@ def calculate_score_and_suggestions(password: str) -> tuple[int, list[str], list
 
     categories = sum([has_lower, has_upper, has_digit, has_symbol])
     findings.append(f"Character types used: {categories}/4.")
-
     score += categories * 10
+
     if categories < 3:
         suggestions.append("Mix uppercase, lowercase, digits, and symbols.")
 
@@ -130,15 +168,17 @@ def calculate_score_and_suggestions(password: str) -> tuple[int, list[str], list
     # Clamp score
     score = max(0, min(score, 100))
 
-    # Dedupe suggestions while preserving order
-    seen: set[str] = set()
-    deduped: list[str] = []
-    for s in suggestions:
-        if s not in seen:
-            seen.add(s)
-            deduped.append(s)
+    return score, findings, _dedupe_preserve_order(suggestions), entropy
 
-    return score, findings, deduped, entropy
+
+def _dedupe_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for x in items:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
 
 
 def analyze_and_print(password: str) -> None:
