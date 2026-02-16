@@ -23,7 +23,6 @@ The tool analyzes passwords locally and provides a score, findings, and clear im
 
 ## Usage
 
-Run the program from the project root:
-
+### Interactive prompt (recommended)
 ```bash
 python password_checker.py
