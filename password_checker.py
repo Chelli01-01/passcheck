@@ -1,5 +1,8 @@
 import math
 import getpass
+import argparse
+import json
+import sys
 
 
 def load_common_words(path: str = "common_words.txt") -> set[str]:
@@ -235,11 +238,65 @@ def analyze_and_print(password: str) -> None:
     else:
         print("- Looks good. Keep using unique passwords per site.")
 
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        prog="passcheck",
+        description="Local password strength checker (password input hidden when prompted).",
+    )
+    p.add_argument(
+        "--password",
+        help="Password to analyze (not recommended to use in shared terminals/shell history). "
+             "If omitted, you will be prompted securely.",
+    )
+    p.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results as JSON.",
+    )
+    p.add_argument(
+        "--score-only",
+        action="store_true",
+        help="Only print the numeric score (0-100).",
+    )
+    p.add_argument(
+        "--no-input",
+        action="store_true",
+        help="Do not prompt for password. If --password is not provided, exit with error.",
+    )
+    return p.parse_args(argv)
 
-def main() -> None:
-    password = getpass.getpass("Enter password: ")
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    if args.password is not None:
+        password = args.password
+    else:
+        if args.no_input:
+            print("Error: --no-input was set but no --password was provided.", file=sys.stderr)
+            return 2
+        password = getpass.getpass("Enter password: ")
+
+    score, findings, suggestions, entropy = calculate_score_and_suggestions(password)
+
+    if args.score_only:
+        print(score)
+        return 0
+
+    if args.json:
+        payload = {
+            "score": score,
+            "strength": strength_label(score),
+            "entropy_bits": round(entropy, 2),
+            "findings": findings,
+            "suggestions": suggestions,
+        }
+        print(json.dumps(payload, indent=2))
+        return 0
+
     analyze_and_print(password)
+    return 0
 
+from passcheck.cli import main
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

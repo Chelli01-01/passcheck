@@ -1,0 +1,183 @@
+import math
+
+
+def load_common_words(path: str = "common_words.txt") -> set[str]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return {
+                line.strip().lower()
+                for line in f
+                if line.strip() and not line.lstrip().startswith("#")
+            }
+    except FileNotFoundError:
+        return set()
+
+
+def normalize_leetspeak(s: str) -> str:
+    table = str.maketrans({
+        "@": "a", "4": "a",
+        "8": "b",
+        "(": "c", "{": "c", "[": "c",
+        "3": "e",
+        "6": "g", "9": "g",
+        "1": "i", "!": "i", "|": "i",
+        "0": "o",
+        "$": "s", "5": "s",
+        "7": "t", "+": "t",
+        "2": "z",
+    })
+    return s.lower().translate(table)
+
+
+def find_dictionary_hits(password: str, common_words: set[str]) -> list[str]:
+    raw = password.lower()
+    norm = normalize_leetspeak(password)
+
+    hits: list[str] = []
+    for w in common_words:
+        if len(w) < 4:
+            continue
+        if w in raw or w in norm:
+            hits.append(w)
+
+    hits.sort(key=len, reverse=True)
+    return hits
+
+
+def estimate_entropy_bits(password: str) -> float:
+    charset = 0
+    if any(c.islower() for c in password):
+        charset += 26
+    if any(c.isupper() for c in password):
+        charset += 26
+    if any(c.isdigit() for c in password):
+        charset += 10
+    if any(not c.isalnum() for c in password):
+        charset += 33
+
+    if charset == 0:
+        return 0.0
+
+    return len(password) * math.log2(charset)
+
+
+def has_simple_sequence(password: str, min_len: int = 4) -> bool:
+    s = password.lower()
+    for i in range(len(s) - min_len + 1):
+        chunk = s[i : i + min_len]
+        diffs = [ord(chunk[j + 1]) - ord(chunk[j]) for j in range(min_len - 1)]
+        if all(d == 1 for d in diffs) or all(d == -1 for d in diffs):
+            return True
+    return False
+
+
+def has_repeated_run(password: str, run_len: int = 4) -> bool:
+    if run_len <= 1:
+        return False
+
+    count = 1
+    for i in range(1, len(password)):
+        if password[i] == password[i - 1]:
+            count += 1
+            if count >= run_len:
+                return True
+        else:
+            count = 1
+    return False
+
+
+def strength_label(score: int) -> str:
+    if score < 30:
+        return "VERY WEAK"
+    if score < 50:
+        return "WEAK"
+    if score < 70:
+        return "OKAY"
+    return "STRONG"
+
+
+def _dedupe_preserve_order(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for x in items:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def calculate_score_and_suggestions(password: str) -> tuple[int, list[str], list[str], float]:
+    findings: list[str] = []
+    suggestions: list[str] = []
+
+    length = len(password)
+    entropy = estimate_entropy_bits(password)
+
+    score = 0
+
+    # Dictionary check
+    common_words = load_common_words()
+    hits = find_dictionary_hits(password, common_words)
+    if hits:
+        findings.append(f"Contains common word(s): {', '.join(hits[:3])}.")
+        suggestions.append("Avoid common words or names")
+        score -= 25
+
+    # Length
+    if length == 0:
+        findings.append("Password is empty.")
+        suggestions.append("Use a password manager to generate a long random password.")
+        return 0, findings, _dedupe_preserve_order(suggestions), entropy
+
+    if length < 8:
+        findings.append("Too short (< 8 characters).")
+        suggestions.append("Increase length to at least 12–14 characters")
+        score += 5
+    elif length < 12:
+        findings.append("Short (8–11 characters).")
+        suggestions.append("Increase length to 12–14+ characters")
+        score += 20
+    elif length < 16:
+        findings.append("Good length (12–15 characters).")
+        score += 32
+    else:
+        findings.append("Great length (16+ characters).")
+        score += 40
+
+    # Variety
+    has_lower = any(c.islower() for c in password)
+    has_upper = any(c.isupper() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    has_symbol = any(not c.isalnum() for c in password)
+
+    categories = sum([has_lower, has_upper, has_digit, has_symbol])
+    findings.append(f"Character types used: {categories}/4.")
+    score += categories * 10
+
+    if categories < 3:
+        suggestions.append("Mix uppercase, lowercase, digits, and symbols")
+
+    # Entropy bonus
+    if entropy < 40:
+        findings.append(f"Low estimated entropy (~{entropy:.1f} bits).")
+        suggestions.append("Make it longer and less predictable")
+    elif entropy < 70:
+        findings.append(f"Moderate estimated entropy (~{entropy:.1f} bits).")
+        score += 10
+    else:
+        findings.append(f"High estimated entropy (~{entropy:.1f} bits).")
+        score += 20
+
+    # Pattern penalties
+    if has_simple_sequence(password):
+        findings.append("Contains a simple sequence (e.g., 1234 / abcd).")
+        suggestions.append("Avoid sequences like 1234 or abcd")
+        score -= 15
+
+    if has_repeated_run(password):
+        findings.append("Contains repeated characters (e.g., aaaa / 1111).")
+        suggestions.append("Avoid repeated characters like aaaa")
+        score -= 15
+
+    score = max(0, min(score, 100))
+    return score, findings, _dedupe_preserve_order(suggestions), entropy

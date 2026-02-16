@@ -1,0 +1,19 @@
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Packaging artifacts
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+
+# Pytest
+.pytest_cache/
+
+# OS files
+.DS_Store

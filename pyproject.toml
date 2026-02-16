@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "passcheck"
+version = "0.1.0"
+description = "Local password strength checker with scoring, dictionary checks, and pytest tests."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Your Name" }]
+dependencies = []
+
+[project.scripts]
+passcheck = "passcheck.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["passcheck*"]
